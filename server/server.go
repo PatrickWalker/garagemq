@@ -10,7 +10,6 @@ import (
 	"sync"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/patrickwalker/garagemq/amqp"
 	"github.com/patrickwalker/garagemq/auth"
 	"github.com/patrickwalker/garagemq/config"
@@ -19,6 +18,7 @@ import (
 	"github.com/patrickwalker/garagemq/msgstorage"
 	"github.com/patrickwalker/garagemq/srvstorage"
 	"github.com/patrickwalker/garagemq/storage"
+	log "github.com/sirupsen/logrus"
 )
 
 type ServerState int
@@ -61,7 +61,7 @@ type Server struct {
 	status       ServerState
 	storage      *srvstorage.SrvStorage
 	metrics      *SrvMetricsState
-	CheckAuth 	 func(saslData auth.SaslData) bool 
+	CheckAuth    func(saslData auth.SaslData) bool
 }
 
 // NewServer returns new instance of AMQP Server
@@ -77,7 +77,7 @@ func NewServer(host string, port string, protoVersion string, config *config.Con
 		connSeq:      0,
 	}
 	server.initMetrics()
-	server.CheckAuth =  server.checkAuth
+	server.CheckAuth = server.checkAuth
 	return
 }
 
@@ -148,6 +148,7 @@ func (srv *Server) Stop() {
 	if srv.storage != nil {
 		srv.storage.Close()
 	}
+	srv.clearServerStorage()
 
 	srv.status = Stopped
 }
@@ -218,12 +219,12 @@ func (srv *Server) removeConnection(connID uint64) {
 }
 
 // AddUser adds a AMQP user to the server performs an update of password if already exists
-func (srv *Server) AddUser(user config.User){
+func (srv *Server) AddUser(user config.User) {
 	srv.users[user.Username] = user.Password
 }
 
 // SetAuth allows a user to substitute the Auth Function used
-func (srv *Server) SetAuth(in func(auth.SaslData) bool){
+func (srv *Server) SetAuth(in func(auth.SaslData) bool) {
 	srv.CheckAuth = in
 }
 
@@ -246,6 +247,9 @@ func (srv *Server) initUsers() {
 	for _, user := range srv.config.Users {
 		srv.users[user.Username] = user.Password
 	}
+}
+func (srv *Server) clearServerStorage() {
+	srv.RemoveStorageInstance("server")
 }
 
 func (srv *Server) initServerStorage() {
@@ -289,6 +293,12 @@ func (srv *Server) initVirtualHostsFromStorage() {
 
 	srv.vhostsLock.Lock()
 	defer srv.vhostsLock.Unlock()
+}
+
+// RemoveStorageInstance is up to what you expect it to be up to
+func (srv *Server) RemoveStorageInstance(name string) error {
+	stPath := fmt.Sprintf("%s/%s", srv.config.Db.DefaultPath, srv.config.Db.Engine)
+	return os.RemoveAll(stPath)
 }
 
 func (srv *Server) getStorageInstance(name string, isPersistent bool) interfaces.DbStorage {
